@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RapidSCADA v6 password encoder/decoder</title>
+    <style>
+        html {
+            color: #ddd;
+            background-color: black;
+            max-width: 40em;
+            margin: auto;
+        }
+        a {color: #092
+        }
+        #decode {width: 35em}
+        nobr {font-family: monospace}
+        pre {
+            border: 1px dashed #555;
+            padding: 0.5em;
+        }
+    </style>
+</head>
+<body>
+<h2><a target="_blank" href="https://rapidscada.org">RapidSCADA v6</a> password encoder/decoder</h2>
+<p>RapidSCADA v6 uses <a target="_blank" href="https://en.wikipedia.org/wiki/Advanced_Encryption_Standard">AES</a> with key
+    <nobr>0ABA06BC1A5D443E5AE8467FB88549F6E9CC90F0804533FC2A67D9BA00CEC78A</nobr> and iv
+    <nobr>A55C5A7B40D42D33A46FF784941C4785</nobr>.
+    So <u>don't expose your config</u>! <a target="_blank" href="https://en.wikipedia.org/wiki/Alice_and_Bob">Eve</a> may easily decode your password!</p>
+<label for="encode">Encode: </label><input id="encode" value="scada"><pre id="encoded"></pre><br>
+<label for="decode">Decode: </label><input id="decode" value="B9D0F030265751578B00E9801C69320C"><pre id="decoded"></pre>
+<script>
+    const encode = document.getElementById('encode');
+    const decode = document.getElementById('decode');
+
+    const _arrayBufferFromHexString = (hexString) => {
+        const bytes = Uint8Array.from(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+        return bytes.buffer;
+    }
+
+    const keyArrayBuffer = _arrayBufferFromHexString('0ABA06BC1A5D443E5AE8467FB88549F6E9CC90F0804533FC2A67D9BA00CEC78A');
+    const ivArrayBuffer = _arrayBufferFromHexString('A55C5A7B40D42D33A46FF784941C4785');
+
+    const encryptScadaPasw = async () => {
+        const paswArrayBuffer = new TextEncoder().encode(encode.value);
+
+        const secretKey = await crypto.subtle.importKey('raw', keyArrayBuffer, {
+            name: 'AES-CBC',
+            length: 256
+        }, true, ['encrypt', 'decrypt']);
+
+        const encodedPassword = await crypto.subtle.encrypt({
+            name: 'AES-CBC',
+            iv: ivArrayBuffer
+        }, secretKey, paswArrayBuffer)
+
+        const passwordInHex = async (password) => {
+            return [...new Uint8Array(password)].map(e => e.toString(16).toUpperCase()).map(e => e.length === 1 ? '0'+e : e).join('')
+        };
+
+        passwordInHex(encodedPassword)
+            .then(encoded => document.getElementById('encoded').textContent = encoded)
+    }
+
+    const decryptScadaPasw = async () => {
+        let decoded = '[error]';
+        try {
+            const paswArrayBuffer = _arrayBufferFromHexString(decode.value);
+
+            const secretKey = await crypto.subtle.importKey('raw', keyArrayBuffer, {
+                name: 'AES-CBC',
+                length: 256
+            }, true, ['encrypt', 'decrypt']);
+
+            const decodedPassword = await crypto.subtle.decrypt({
+                name: 'AES-CBC',
+                iv: ivArrayBuffer
+            }, secretKey, paswArrayBuffer)
+
+            decoded = new TextDecoder().decode(decodedPassword);
+        } catch (e) {}
+        document.getElementById('decoded').textContent = decoded;
+    }
+
+    const updateValues = () => {
+        encryptScadaPasw();
+        decryptScadaPasw();
+    }
+
+    [encode, decode].forEach(el => ['change', 'click', 'keyup'].forEach(event => {
+        el.addEventListener(event, updateValues)
+    }));
+
+    updateValues();
+</script>
+</body>
+</html>
